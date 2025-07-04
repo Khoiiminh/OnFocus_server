@@ -1,6 +1,6 @@
 import { Router } from 'express';
 const router = Router();
-import { register, login } from '../controllers/useController';
+import { register, login } from '../controllers/userController.js';
 
 // register
 router.post('/register', register);

@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ExternalAccount {
+  id               Int        @id @default(autoincrement())
+  user_id          Int
+  source_id        Int
+  external_user_id String?    @db.VarChar(255)
+  access_token     String?    @db.Text
+  refresh_token    String?    @db.Text
+  expires_at       DateTime?  @db.DateTime(0)
+  connected_at     DateTime?  @default(now()) @db.Timestamp(0)
+  user             users      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "external_accounts_ibfk_1")
+  source           sources    @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "external_accounts_ibfk_2")
+  messages         messages[]
+
+  @@index([source_id], map: "source_id")
+  @@index([user_id], map: "user_id")
+  @@map("external_accounts")
+}
+
+model attachments {
+  id         Int       @id @default(autoincrement())
+  message_id Int
+  file_name  String?   @db.VarChar(255)
+  file_url   String?   @db.Text
+  file_type  String?   @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  messages   messages  @relation(fields: [message_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "attachments_ibfk_1")
+
+  @@index([message_id], map: "message_id")
+}
+
+model message_versions {
+  id         Int       @id @default(autoincrement())
+  message_id Int
+  version    Int
+  content    String    @db.Text
+  update_at  DateTime? @default(now()) @db.Timestamp(0)
+  messages   messages  @relation(fields: [message_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "message_versions_ibfk_1")
+
+  @@index([message_id], map: "message_id")
+}
+
+model messages {
+  id                  Int                      @id @default(autoincrement())
+  user_id             Int
+  source_id           Int
+  external_account_id Int
+  external_message_id String?                  @db.VarChar(255)
+  original_content    String                   @db.Text
+  received_at         DateTime                 @db.DateTime(0)
+  is_read             Boolean?                 @default(false)
+  priority_level      messages_priority_level? @default(medium)
+  created_at          DateTime?                @default(now()) @db.Timestamp(0)
+  attachments         attachments[]
+  message_versions    message_versions[]
+  users               users                    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "messages_ibfk_1")
+  sources             sources                  @relation(fields: [source_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "messages_ibfk_2")
+  external_accounts   ExternalAccount          @relation(fields: [external_account_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "messages_ibfk_3")
+  summaries           summaries[]
+  summary_cache       summary_cache[]
+
+  @@index([external_account_id], map: "external_account_id")
+  @@index([source_id], map: "source_id")
+  @@index([user_id], map: "user_id")
+}
+
+model sources {
+  id                Int               @id @default(autoincrement())
+  name              String            @unique(map: "name") @db.VarChar(50)
+  type              String?           @db.VarChar(50)
+  icon_url          String?           @db.VarChar(255)
+  base_url          String?           @db.VarChar(255)
+  created_at        DateTime?         @default(now()) @db.Timestamp(0)
+  external_accounts ExternalAccount[]
+  messages          messages[]
+}
+
+model summaries {
+  id                Int       @id @default(autoincrement())
+  message_id        Int
+  summary_text      String    @db.Text
+  is_edited         Boolean?  @default(false)
+  model_used        String?   @db.VarChar(50)
+  temperature       Float?    @default(0.7) @db.Float
+  is_auto_generated Boolean?  @default(true)
+  generated_at      DateTime? @default(now()) @db.Timestamp(0)
+  messages          messages  @relation(fields: [message_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "summaries_ibfk_1")
+
+  @@index([message_id], map: "message_id")
+}
+
+model summary_cache {
+  id           Int       @id @default(autoincrement())
+  message_id   Int
+  summary_text String    @db.Text
+  model_used   String?   @db.VarChar(50)
+  temperature  Float?    @default(0.7) @db.Float
+  created_at   DateTime? @default(now()) @db.Timestamp(0)
+  messages     messages  @relation(fields: [message_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "summary_cache_ibfk_1")
+
+  @@index([message_id], map: "message_id")
+}
+
+model users {
+  id                  Int               @id @default(autoincrement())
+  name                String?           @db.VarChar(100)
+  email               String            @unique(map: "email") @db.VarChar(100)
+  password            String            @db.Text
+  is_verified         Boolean?          @default(false)
+  verification_token  String?           @db.VarChar(100)
+  email_verified_at   DateTime?         @db.DateTime(0)
+  reset_token_expires DateTime?         @db.DateTime(0)
+  is_active           Boolean?          @default(true)
+  created_at          DateTime?         @default(now()) @db.Timestamp(0)
+  update_at           DateTime?         @default(now()) @db.Timestamp(0)
+  external_accounts   ExternalAccount[]
+  messages            messages[]
+}
+
+enum messages_priority_level {
+  low
+  medium
+  high
+}
