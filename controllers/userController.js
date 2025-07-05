@@ -54,3 +54,26 @@ export async function login(req, res) {
         res.status(500).json({ error: err.message });
     }
 }
+
+export async function getProfile(req, res) {
+    try {
+        const user = await prisma.users.findUnique({
+            where: { id: req.user.UserId },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                is_verified: true,
+                created_at: true
+            }
+        });
+
+        if ( !user ) {
+            res.status(404).json({error: 'User not found' });
+        }
+
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({error: err.message});
+    }
+}
