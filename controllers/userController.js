@@ -69,7 +69,7 @@ export async function getProfile(req, res) {
         });
 
         if ( !user ) {
-            res.status(404).json({error: 'User not found' });
+            return res.status(404).json({error: 'User not found' });
         }
 
         res.json(user);
