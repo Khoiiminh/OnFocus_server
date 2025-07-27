@@ -115,7 +115,7 @@ model users {
   email               String            @unique(map: "email") @db.VarChar(100)
   password            String            @db.Text
   is_verified         Boolean?          @default(false)
-  verification_token  String?           @db.VarChar(100)
+  verification_token  String?           @unique(map: "verification_token") @db.VarChar(100)
   email_verified_at   DateTime?         @db.DateTime(0)
   reset_token_expires DateTime?         @db.DateTime(0)
   is_active           Boolean?          @default(true)
