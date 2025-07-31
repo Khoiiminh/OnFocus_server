@@ -7,7 +7,8 @@ import {
     requestPasswordReset, 
     resetPassword, 
     updateProfile, 
-    deleteAccount
+    deleteAccount, 
+    logout
 } from '../controllers/userController.js';
 import { authenticateToken } from '../middlewares/authMiddleware.js';
 
@@ -25,6 +26,7 @@ router.post('/reset-password', resetPassword);
 
 // login
 router.post('/login', login);
+router.post('/logout', authenticateToken, logout);
 
 // delete user
 router.delete('/delete', authenticateToken, deleteAccount)
