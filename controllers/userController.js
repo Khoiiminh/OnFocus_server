@@ -4,7 +4,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { localhost } from '../config/server.js';
-import { successResponse, errorResponse } from '../utils/responsehelper.js';
+import { successResponse, errorResponse } from '../utils/responseHelper.js';
+import { getRedis } from '../utils/redisClient.js';
 
 export async function register(req, res) {
     try {
@@ -13,16 +14,15 @@ export async function register(req, res) {
         // check if user already exists
         const existingUser = await prisma.users.findUnique({ where: { email } });
         if (existingUser) {
-            return res.status(400).json({ error: 'Email already exists' });
-            return errorResponse(res, 'Email already exists', 400);
+            return errorResponse(res, 400, 'Email already exists', 'EMAIL_EXISTS', 'Please use a different email address.');
         }
 
         if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(email)) {
-            return res.status(400).json({error: 'Invalid email name'});
+            return errorResponse(res, 400, 'Invalid email domain', 'INVALID_EMAIL_DOMAIN', 'Please use a Gmail address.');
         }
 
         if ( !password || password.length < 6 ) {
-            return res.status(400).json({error: 'Password must be at least 6 characters long'});
+            return errorResponse(res, 400, 'Password must be at least 6 characters long', 'INVALID_PASSWORD', 'Please choose a stronger password.');
         }
 
         // hash password
@@ -54,7 +54,7 @@ export async function register(req, res) {
             UserEmail: user.email,
         });
     } catch (err) {
-        return errorResponse(res, 'Registered failed', 500, err.message, err.details );
+        return errorResponse(res, 500, 'Registered failed', err.message, err.details);
     }
 }
 
@@ -65,25 +65,25 @@ export async function login(req, res) {
         const user = await prisma.users.findUnique({ where: { email }});
 
         if ( !email || !password ) {
-            return errorResponse(res, 'Email and password are required!', 400);
+            return errorResponse(res, 400, 'Email and password are required!', 'MISSING_CREDENTIALS', 'Please provide both email and password.');
         }
 
         if ( !user ) {
-            return errorResponse(res, 'User not found', 401, 'USER_NOT_FOUND', 'Please check your email or register.');
+            return errorResponse(res, 401, 'User not found', 'USER_NOT_FOUND', 'Please check your email or register.');
         }
 
         if ( !user.is_verified ) {
-            return errorResponse(res, 'Unverified email', 403, 'UNVERIFIED_EMAIL', 'Please, verify your email before logging in.');
+            return errorResponse(res, 403, 'Unverified email', 'UNVERIFIED_EMAIL', 'Please, verify your email before logging in.');
         }
 
         const match = await bcrypt.compare(password, user.password);
         if ( !match ) {
-            return errorResponse(res, 'Invalid credentials', 401, 'INVALID_CREDENTIALS', 'The password is incorrect.');
+            return errorResponse(res, 401, 'Invalid credentials', 'INVALID_CREDENTIALS', 'The password is incorrect.');
         }
 
         const token = jwt.sign({ UserId: user.id }, process.env.JWT_SECRET, { expiresIn: '1d'});
         if ( !token ) {
-            return errorResponse(res, 'Failed to generate token', 500);
+            return errorResponse(res, 500, 'Failed to generate token', 'TOKEN_GENERATION_FAILED', 'Please try again later.');
         }   
 
         console.log(`Token for ${user.name}: ${token}`)
@@ -93,7 +93,7 @@ export async function login(req, res) {
             UserEmail: user.email,
         });
     } catch (err) {
-        return errorResponse(res, 'Login failed', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Login failed', err.message, err.details);
     }
 }
 
@@ -111,7 +111,7 @@ export async function getProfile(req, res) {
         });
 
         if ( !user ) {
-            return errorResponse(res, 'User not found', 404);
+            return errorResponse(res, 404, 'User not found', 'USER_NOT_FOUND', 'Please check your user ID.');
         }
 
         return successResponse(res, 'Profile retrieved successfully', {
@@ -122,7 +122,7 @@ export async function getProfile(req, res) {
             Message: user.message || 'No additional message'
         })
     } catch (err) {
-        return errorResponse(res, 'Failed to retrieve profile', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Failed to retrieve profile', err.message, err.details);
     }
 }
 
@@ -130,12 +130,12 @@ export async function verifyEmail(req, res) {
     try {
         const { token } = req.query;
         if ( !token ) {
-            return errorResponse(res, 'Verification token missing', 400);
+            return errorResponse(res, 400, 'Verification token missing', 'MISSING_TOKEN', 'Please provide a verification token.');
         }
 
         const user = await prisma.users.findUnique({where: {verification_token: token}});
         if ( !user ) {
-            return errorResponse(res, 'Invalid or expired token', 400, 'INVALID_TOKEN', 'Please check your verification link or request a new one.');
+            return errorResponse(res, 400, 'Invalid or expired token', 'INVALID_TOKEN', 'Please check your verification link or request a new one.');
         }
 
         await prisma.users.update({
@@ -149,7 +149,7 @@ export async function verifyEmail(req, res) {
 
         return successResponse(res, '✅ Email verified successfully!', null);
     } catch (err) {
-        return errorResponse(res, 'Email verification failed', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Email verification failed', err.message, err.details);
     }
 };
 
@@ -159,7 +159,7 @@ export async function requestPasswordReset(req, res) {
 
         const user = await prisma.users.findUnique({where: { email }});
         if ( !user ) {
-            return errorResponse(res, 'User not found', 404, 'USER_NOT_FOUND', 'Please check your email or register.');
+            return errorResponse(res, 404, 'User not found', 'USER_NOT_FOUND', 'Please check your email or register.');
         }
 
         const resetToken = randomBytes(32).toString('hex');
@@ -178,7 +178,7 @@ export async function requestPasswordReset(req, res) {
 
         return successResponse(res, 'Password reset link has been sent (check logs for now).');
     } catch (err) {
-        return errorResponse(res, 'Failed to request password reset', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Failed to request password reset', err.message, err.details);
     }
 };
 
@@ -196,15 +196,15 @@ export async function resetPassword(req, res) {
 
         const isSamePassword = await bcrypt.compare(newPassword, user.password);
         if (isSamePassword) {
-            return errorResponse(res, 'New password cannot be the same as the old password', 400, 'SAME_PASSWORD', 'Please choose a different password.');
+            return errorResponse(res, 400, 'New password cannot be the same as the old password', 'SAME_PASSWORD', 'Please choose a different password.');
         }
 
         if ( !user ) {
-            return errorResponse(res, 'Invalid or expired token', 400, 'INVALID_TOKEN', 'Please check your verification link or request a new one.');
+            return errorResponse(res, 400, 'Invalid or expired token', 'INVALID_TOKEN', 'Please check your verification link or request a new one.');
         }
 
         if ( !newPassword || newPassword.length < 6 ) {
-            return errorResponse(res, 'New password must be at least 6 characters long', 400, 'INVALID_PASSWORD', 'Password must be at least 6 characters long.');
+            return errorResponse(res, 400, 'New password must be at least 6 characters long', 'INVALID_PASSWORD', 'Password must be at least 6 characters long.');
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -220,7 +220,7 @@ export async function resetPassword(req, res) {
 
         return successResponse(res, '✅ Password updated successfully');
     } catch (err) {
-        return errorResponse(res, 'Failed to reset password', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Failed to reset password', err.message, err.details);
     }
 };
 
@@ -232,7 +232,7 @@ export async function updateProfile(req, res) {
         const updates = {};
 
         if (!userId) {
-            return errorResponse(res, 'Unauthorized - UserID is missing!', 401, 'UNAUTHORIZED', 'Please log in to update your profile.');
+            return errorResponse(res, 401, 'Unauthorized - UserID is missing!', 'UNAUTHORIZED', 'Please log in to update your profile.');
         }
 
         if (name) {
@@ -259,7 +259,7 @@ export async function updateProfile(req, res) {
         });
 
         if ( !updateUser ) {
-            return errorResponse(res, 'User not found', 404, 'USER_NOT_FOUND', 'Please check your user ID or register.');
+            return errorResponse(res, 404, 'User not found', 'USER_NOT_FOUND', 'Please check your user ID or register.');
         }
 
         return successResponse(res, 'Profile updated successfully', {
@@ -269,7 +269,7 @@ export async function updateProfile(req, res) {
             IsVerified: updateUser.is_verified
         })
     } catch (err) {
-        return errorResponse(res, 'Failed to update profile', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Failed to update profile', err.message, err.details);
     }
 }
 
@@ -282,11 +282,11 @@ export async function deleteAccount(req, res) {
         });
 
         if ( !userId ) {
-            return errorResponse(res, 'Unauthorized. UserId is missing', 401);
+            return errorResponse(res, 401, 'Unauthorized. UserId is missing', 'UNAUTHORIZED', 'Please log in to delete your account.');
         }
 
         if ( !user ) {
-            return errorResponse(res, 'User not found', 404);
+            return errorResponse(res, 404, 'User not found', 'USER_NOT_FOUND', 'Please check your user ID or register.');
         }
 
         await prisma.users.delete({
@@ -295,6 +295,25 @@ export async function deleteAccount(req, res) {
 
         return successResponse(res, '🗑️ Your account has been deleted successfully.');
     }  catch(err) {
-        return errorResponse(res, 'Failed to delete account', 500, err.message, err.details);
+        return errorResponse(res, 500, 'Failed to delete account', err.message, err.details);
     } 
+}
+
+export async function logout(req, res) {
+    try {
+        const token = req.token;
+        const tokenExpiry = req.tokenExpiry ?? (Date.now() + 60_000); // Default to 1 minute if not set
+        const time_to_live = Math.max(1, Math.floor((tokenExpiry - Date.now()) / 1000)); // Ensure at least 1 second
+
+        if ( !token ) {
+            return errorResponse(res, 400, 'No token provided', 'NO_TOKEN', 'Please log in to continue.');
+        }
+
+        const redis = await getRedis();
+        await redis.setEx(`bl_${token}`, time_to_live, '1');
+
+        return successResponse(res, 'You have been logged out successfully.');
+    } catch (err) {
+        return errorResponse(res, 500, 'Logout failed', err.message, err.details);
+    }
 }
